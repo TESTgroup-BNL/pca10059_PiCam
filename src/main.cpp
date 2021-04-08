@@ -3,12 +3,6 @@
 #include <bluetooth.h>
 #include <gps.h>
 
-#include <Adafruit_LittleFS.h>
-#include <InternalFileSystem.h>
-using namespace Adafruit_LittleFS_Namespace;
-
-File file(InternalFS);
-
 #define Pi_Enable_Pin   17 //P0.17
 #define GPS_Enable_Pin  20 //P0.20
 
@@ -57,6 +51,8 @@ Metro menu_timeout = Metro(30000);  //If no response after 30 seconds, resume no
 
 float battV = 0;
 uint16_t img_count=0;
+float free_space = 0;
+float total_space = 0;
 int16_t old_count=0;
 uint16_t id=0;
 uint32_t timer = millis();
@@ -82,7 +78,7 @@ void setup()
   digitalWrite(Pi_Enable_Pin, LOW);
   delay(2000); //Give everything a chance to reset
 
-  Serial1.begin(460800);
+  Serial1.begin(230400);
 
   //Set batt voltage
   updateBatt(calcBattPerc(battV));
@@ -133,7 +129,7 @@ void loop()
     
     if (!inMenu) {
       getStatus(buf);
-      writeBLE(buf, true, false);
+      writeBLE(buf);
 
       if (img_count==0) writeBLE("No images saved yet");
       else writeBLE(pi_buf);  //Send last log line
@@ -165,9 +161,9 @@ void getBLECmd(char cmd) {
   if (cmd == 0x00) cmd = bleuart.read();
   switch (cmd) {
     case 'c': {
-      sprintf(pi_buf, "\nCfg:\n\timg int(min):%d\n\tBLE int(min):%d\n\tGPS int(hr):%d\n\tGPS clk int(min):%d\n\tGPS TO(s):%d\n\tClk res(s):%d\n\tPi pwr TO(s):%d\n\tImg cap TO(s)%d\n\tBatt Max(V):%0.2f\n\tLow Batt(V):%0.2f\n",
+      sprintf(buf, "\nCfg:\n\timg int(min):%d\n\tBLE int(min):%d\n\tGPS int(hr):%d\n\tGPS clk int(min):%d\n\tGPS TO(s):%d\n\tClk res(s):%d\n\tPi pwr TO(s):%d\n\tImg cap TO(s)%d\n\tBatt Max(V):%0.2f\n\tLow Batt(V):%0.2f\n",
       IMAGE_INTERVAL, BLE_INTERVAL, GPS_INTERVAL, CLK_SYNC_INT/60000, GPS_TIMEOUT/1000, CLK_RESOLUTION, PI_ON_TIMEOUT/1000, PI_SAVE_TIMEOUT/1000, MAX_BATT_VOLTAGE, LOW_BATT_CUTOFF);
-      writeBLE(pi_buf);
+      writeBLE(buf);
       break;
     }
     case 'i': {
@@ -190,8 +186,8 @@ void getBLECmd(char cmd) {
       uint8_t m = bleuart.parseInt();
       uint8_t s = bleuart.parseInt();
       setTime(h,m,s,dy,mth,yr);
-      sprintf(pi_buf, "Time set: %04d-%02d-%02d %02d:%02d:%02d\n", year(), month(), day(), hour(), minute(), second());
-      writeBLE(pi_buf);
+      sprintf(buf, "Time set: %04d-%02d-%02d %02d:%02d:%02d\n", year(), month(), day(), hour(), minute(), second());
+      writeBLE(buf);
       break;
     }
     default: {
@@ -212,7 +208,7 @@ void getAdv(char* statbuf) {
 }
 
 void getStatus(char* statbuf) {
-  sprintf(statbuf, "%04d-%02d-%02d %02d:%02d:%02d, imgs: %04d, batt: %.2f", year(), month(), day(), hour(), minute(), second(), img_count, getBattV());
+  sprintf(statbuf, "%04d-%02d-%02d %02d:%02d:%02d, imgs: %04d, dfs: %.2f/%.2fGB, batt: %.2f", year(), month(), day(), hour(), minute(), second(), img_count, free_space, total_space, getBattV());
 }
 
 void enterStandby() {
@@ -237,7 +233,7 @@ void exitStandby() {
   //pinMode(PIN_WIRE_SCL, OUTPUT_S0D1);
   digitalWrite(Pi_Enable_Pin, HIGH);
   digitalWrite(LED_BUILTIN, HIGH);
-  Serial1.begin(460800);
+  Serial1.begin(230400);
   Serial1.setTimeout(PI_ON_TIMEOUT);  
 }
 
@@ -248,7 +244,7 @@ void startPi(bool newrun) {
     return;
   }
 
-  sprintf(buf, "Capturing image %d\n", img_count);
+  sprintf(buf, "Capturing image %d...", img_count);
   writeBLE(buf);
 
   exitStandby();
@@ -288,9 +284,12 @@ void startPi(bool newrun) {
       blinkLED(3);
     }
     else {
+      free_space = Serial1.parseFloat();
+      total_space = Serial1.parseFloat();
       img_count++;
+      sprintf(buf, "Done, Free Disk Space: %.2f/%.2fGB", free_space, total_space);
+      writeBLE(buf,true);     
     }
-
     //Serial1.println("Done.");
     Serial1.flush();
     delay(200);
@@ -307,7 +306,7 @@ void startPiPreview() {
     blinkLED(3);
     return;
   }
-  writeBLE("Capturing preview...\n");
+  writeBLE("Capturing preview...");
 
   exitStandby();
 
@@ -332,15 +331,36 @@ void startPiPreview() {
     else {
       //Read preview data
       uint32_t f_len = Serial1.parseInt();
-      char img_buf[1024];
 
-      Serial1.read(); //skip space
-      Serial1.readBytes(img_buf, min(f_len, sizeof(img_buf)));
+      sprintf(buf, "Getting data from Pi (%d kB)", f_len/1024);
+      writeBLE(buf);
 
-      sprintf(pi_buf, "img_blob:%06d:", f_len);
-      writeBLE(pi_buf); 
-      writeBLE(img_buf);
+      char* img_buf = (char*) malloc(204800);
+      //char img_buf[102400];
+
+      Serial1.readStringUntil('*'); //skip space(s)
+      Serial1.readBytes(img_buf, min(f_len, 204800));
+
+      sprintf(buf, "img_blob:%06d:", f_len);
+      writeBLE(buf, false, true);
+
+      const uint16_t packet_size = 200; //>=255 causes issues at packet boundaries
+      for (uint32_t buf_pos=0;buf_pos<=(f_len-1);buf_pos+=packet_size) {
+        writeBLE(&img_buf[buf_pos], false, true, min(packet_size,(f_len-buf_pos)));
+        delay(50);  //Give web bluetooth time
+        /*
+        uint16_t buf_timeout = 100;
+        while(bleuart.read()!='*') {
+          if (buf_timeout-- <= 0) {
+            writeBLE("Error: Timed out!");
+          }
+          delay(10);
+        }*/
+      } 
+
+      free(img_buf);
     }
+    writeBLE("Preview sent.");
 
     Serial1.flush();
     delay(200);
