@@ -212,7 +212,7 @@ void getBLECmd(char cmd) {
 }
 
 void showMenu(void) {
-  sprintf(pi_buf, "\nMenu:\n'c': Print cfg\n'g': Get GPS fix\n'p': Take picture now\n't [YYYY,MM,DD,hh,mm,ss]': Set time\nEnter command:");
+  sprintf(pi_buf, "\nMenu:\n'c': Print cfg\n'g': Get GPS fix\n'i': Capture img now\n'r': Reload cfg\n't [YYYY,MM,DD,hh,mm,ss]': Set time\nEnter command:");
   writeBLE(pi_buf);
 }
 
