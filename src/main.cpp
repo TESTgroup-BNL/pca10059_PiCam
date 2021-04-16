@@ -10,17 +10,17 @@
 #define PIN_WIRE_SCL    31
 
 uint16_t ID=0;
-uint16_t IMAGE_INTERVAL  = 5;         //mins - MUST BE A MULTIPLE OF CLK_RESOLUTION
+uint16_t IMAGE_INTERVAL  = 30;        //mins - MUST BE A MULTIPLE OF CLK_RESOLUTION
 uint8_t  BLE_INTERVAL    = 1;         //mins - MUST BE A MULTIPLE OF CLK_RESOLUTION
-uint16_t GPS_INTERVAL    = 4;         //hours - MUST BE A MULTIPLE OF CLK_RESOLUTION
-uint32_t CLK_SYNC_INT    = 3600*1000; //ms - GPS clock sync interval (minimum time before accepting an update)    
+uint16_t GPS_INTERVAL    = 24;        //hours - MUST BE A MULTIPLE OF CLK_RESOLUTION
+uint32_t CLK_SYNC_INT    = 60000;     //ms - GPS clock sync interval (minimum time before accepting an update)    
 uint32_t CLK_RESOLUTION  = 5000;      //ms - this affects power consumption vs. response time
 
 uint16_t PI_ON_TIMEOUT   = 10*1000;   //ms
 uint16_t PI_SAVE_TIMEOUT = 30*1000;   //ms
-uint32_t GPS_TIMEOUT     = 5*60*1000; //ms
+uint32_t GPS_TIMEOUT     = 2*60*1000; //ms
 
-float MAX_BATT_VOLTAGE   = 5.4f;      //used to scale batt level
+float MAX_BATT_VOLTAGE   = 5.2f;      //used to scale batt level
 float LOW_BATT_CUTOFF    = 3.4f;      //volts
 
 // Offset hours from gps time (UTC)
