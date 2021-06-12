@@ -53,8 +53,10 @@ Metro uart_timer = Metro(1000);
 Metro menu_timeout = Metro(30000);  //If no response after 30 seconds, resume normal operation
 
 float battV = 0;
+float battV_now = 0;
 uint16_t img_count=0;
 uint16_t run_count=0;
+uint16_t img_size = 0;
 float free_space = 0;
 float total_space = 0;
 int16_t old_count=0;
@@ -130,7 +132,7 @@ void loop()
   }
 
   if (connected) {
-    battV = getBattV();
+    //battV_now = getBattV();
     updateBatt(calcBattPerc(battV));
     
     if (!inMenu) {
@@ -223,14 +225,14 @@ void getAdv(char* statbuf) {
 
 void getStatus(char* statbuf) {
   if (GPS.lat==0x00) {  //No GPS data yet
-    sprintf(statbuf, "%04d-%02d-%02d %02d:%02d:%02d, imgs: %04d, runs: %d, dfs: %.2f/%.2fGB, batt: %.2f, loc: 00.000000X 00.000000X",
+    sprintf(statbuf, "%04d-%02d-%02d %02d:%02d:%02d, imgs: %04d, runs: %d, dfs: %.2f/%.2fGB, lsz: %d, batt: %.2f, batt_now: %.2f, loc: 00.000000X 00.000000X",
       year(), month(), day(), hour(), minute(), second(),
-      img_count, run_count, free_space, total_space, getBattV());
+      img_count, run_count, free_space, total_space, img_size, battV, getBattV());
   }
   else {
-    sprintf(statbuf, "%04d-%02d-%02d %02d:%02d:%02d, imgs: %04d, runs: %d, dfs: %.2f/%.2fGB, batt: %.2f, loc: %02.6f%c %02.6f%c",
+    sprintf(statbuf, "%04d-%02d-%02d %02d:%02d:%02d, imgs: %04d, runs: %d, dfs: %.2f/%.2fGB, lsz: %d, batt: %.2f, batt_now: %.2f, loc: %02.6f%c %02.6f%c",
       year(), month(), day(), hour(), minute(), second(),
-      img_count, run_count, free_space, total_space, getBattV(),
+      img_count, run_count, free_space, total_space, img_size, battV, getBattV(),
       (double)GPS.latitude_fixed/10000000, GPS.lat,
       (double)GPS.longitude_fixed/10000000, GPS.lon);
   }
@@ -263,9 +265,10 @@ void exitStandby() {
 }
 
 void startPi(bool newrun) {
-  float batt = getBattV();
-  if (batt < LOW_BATT_CUTOFF) {
-    blinkLED(3);
+  battV_now = getBattV();    //If standby voltage is already too low, don't bother trying
+  if (battV_now < LOW_BATT_CUTOFF) {
+    writeBLE("Error: Battery too low to turn on Pi");
+    //blinkLED(3);
     return;
   }
 
@@ -277,6 +280,14 @@ void startPi(bool newrun) {
   //Serial1.println("Waiting for 'filename'");
   if (Serial1.find("fv?")) {
     delay(250);
+
+  battV = getBattV();    //If active voltage is too low, quit before going further and risking corruption
+  if (battV < LOW_BATT_CUTOFF) {
+    //blinkLED(2);
+    writeBLE("Error: Battery too low to capture image");
+    enterStandby();
+    return;
+  }
 
     //UUID and datetime for filename
     char fn_buf[64];
@@ -321,11 +332,11 @@ void startPi(bool newrun) {
     //FULL OUTPUT FORMAT: [PiTime], filename, battery voltage, latitude, longitude, altitude, satellites, fix quality
     if (GPS.lat==0x00) {  //No GPS data yet
       sprintf(pi_buf, "%.2f,%.2f,0,X,0,X,0,0,0",
-          batt, getTemp());
+          battV, getTemp());
     }
     else {
       sprintf(pi_buf, "%.2f,%.2f,%.6f,%c,%.6f,%c,%f,%d,%d",
-          batt, getTemp(),
+          battV, getTemp(),
           (double)GPS.latitude_fixed/10000000, GPS.lat,
           (double)GPS.longitude_fixed/10000000, GPS.lon,
           GPS.altitude, (int)GPS.satellites, (int)GPS.fixquality);
@@ -339,11 +350,12 @@ void startPi(bool newrun) {
       blinkLED(3);
     }
     else {
+      img_size = Serial1.parseInt();
       free_space = Serial1.parseFloat();
       total_space = Serial1.parseFloat();
       run_count = Serial1.parseInt();
       img_count++;
-      sprintf(buf, "Done, Free disk space: %.2f/%.2fGB", free_space, total_space);
+      sprintf(buf, "Done, Size: %d kB, Free disk space: %.2f/%.2fGB", img_size, free_space, total_space);
       writeBLE(buf,true);     
     }
     //Serial1.println("Done.");
@@ -357,9 +369,10 @@ void startPi(bool newrun) {
 
 
 void startPiPreview() {
-  float batt = getBattV();
-  if (batt < LOW_BATT_CUTOFF) {
-    blinkLED(3);
+  battV_now = getBattV();    //If standby voltage is already too low, don't bother trying
+  if (battV_now < LOW_BATT_CUTOFF) {
+    writeBLE("Error: Battery too low to turn on Pi");
+    //blinkLED(3);
     return;
   }
   writeBLE("Capturing preview...");
@@ -368,6 +381,14 @@ void startPiPreview() {
 
   if (Serial1.find("fv?")) {
     delay(250);
+
+  battV = getBattV();    //If active voltage is too low, quit before going further and risking corruption
+  if (battV < LOW_BATT_CUTOFF) {
+    //blinkLED(2);
+    writeBLE("Error: Battery too low to capture image");
+    enterStandby();
+    return;
+  }
 
     Serial1.print("*p");
 
@@ -393,9 +414,11 @@ void startPiPreview() {
 
       char* img_buf = (char*) malloc(204800);
       //char img_buf[102400];
-
+      
       Serial1.readStringUntil('*'); //skip space(s)
-      Serial1.readBytes(img_buf, min(f_len, 204800));
+      sd_nvic_critical_region_enter(0); //noInterrupts();
+      Serial1.readBytes(img_buf, min(f_len, 91));
+      sd_nvic_critical_region_exit(0); //interrupts();
 
       sprintf(buf, "img_blob:%06d:", f_len);
       writeBLE(buf, false, true);

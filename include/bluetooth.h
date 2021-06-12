@@ -3,6 +3,7 @@
 
 #include <bluefruit.h>
 #include "nrf_usbd.h"
+#include "nrf_nvic.h"
 #include <TimeLib.h>
 
 extern BLEUart bleuart; // uart over ble
