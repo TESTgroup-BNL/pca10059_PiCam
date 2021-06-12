@@ -416,14 +416,14 @@ void startPiPreview() {
       //char img_buf[102400];
       
       Serial1.readStringUntil('*'); //skip space(s)
-      sd_nvic_critical_region_enter(0); //noInterrupts();
-      Serial1.readBytes(img_buf, min(f_len, 91));
-      sd_nvic_critical_region_exit(0); //interrupts();
+      //sd_nvic_critical_region_enter(0); //noInterrupts();
+      Serial1.readBytes(img_buf, min(f_len, 204800));
+      //sd_nvic_critical_region_exit(0); //interrupts();
 
       sprintf(buf, "img_blob:%06d:", f_len);
       writeBLE(buf, false, true);
 
-      const uint16_t packet_size = 200; //>=255 causes issues at packet boundaries
+      const uint16_t packet_size = 32; //>=255 causes issues at packet boundaries
       for (uint32_t buf_pos=0;buf_pos<=(f_len-1);buf_pos+=packet_size) {
         writeBLE(&img_buf[buf_pos], false, true, min(packet_size,(f_len-buf_pos)));
       } 
