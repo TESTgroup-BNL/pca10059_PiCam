@@ -139,8 +139,8 @@ void loop()
       getStatus(buf);
       writeBLE(buf);
 
-      if (img_count==0) writeBLE("No images saved yet");
-      else writeBLE(pi_buf);  //Send last log line
+      //if (img_count==0) writeBLE("No images saved yet");
+      //else writeBLE(pi_buf);  //Send last log line
     }
 
     if (bleuart.available()>0) {
@@ -419,6 +419,8 @@ void startPiPreview() {
       //sd_nvic_critical_region_enter(0); //noInterrupts();
       Serial1.readBytes(img_buf, min(f_len, 204800));
       //sd_nvic_critical_region_exit(0); //interrupts();
+
+      delay(100);
 
       sprintf(buf, "img_blob:%06d:", f_len);
       writeBLE(buf, false, true);
