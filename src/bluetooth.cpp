@@ -7,6 +7,7 @@ BLEUart bleuart; // uart over ble
 
 uint8_t mac[6];
 volatile bool connected = false;
+volatile uint16_t data_mtu = 20;
 
 void setupBluetooth(char* name) {
   Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
@@ -71,7 +72,10 @@ void updateBatt(uint8_t batt) {
 void writeBLE(char* buf, bool newline, bool flush, uint32_t buf_len) {
     if (connected) {
       if (buf_len > 0) bleuart.write(buf, buf_len);
-      else bleuart.write(buf);
+      else {
+        for (int i=0;i<=strlen(buf)-1;i+=data_mtu)
+          bleuart.write(&buf[i], min(strlen(buf)-i,data_mtu));
+      }
       if (newline) bleuart.write('\n');
       if (flush) bleuart.flushTXD();
     }
@@ -85,16 +89,19 @@ void connect_callback(uint16_t conn_handle)
 
   char central_name[32] = { 0 };
   connection->getPeerName(central_name, sizeof(central_name));
-
+  connection->requestDataLengthUpdate();
+  connection->requestMtuExchange(247);    //Request max MTU
+  data_mtu = connection->getMtu() - 3;
   connected = true;
   //Serial.print("Connected to ");
   //Serial.println(central_name);
   //delay(1000);
 
-  //char connbuf[31];
-  //sprintf(connbuf, "Hello %s!\n", central_name);
-  //bleuart.write(connbuf, sizeof(connbuf));
-  //bleuart.flushTXD();
+/*
+  char connbuf[64];
+  sprintf(connbuf, "Hello %s!, data_mtu=%d\n", central_name, data_mtu);
+  bleuart.write(connbuf, sizeof(connbuf));
+  bleuart.flushTXD();*/
 }
 
 /**

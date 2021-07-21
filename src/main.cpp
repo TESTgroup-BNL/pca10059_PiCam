@@ -89,6 +89,9 @@ void setup()
 
   startPi(true);
 
+  getAdv(adv_buf);
+  updateAdv(adv_buf);
+
   //Get time and location from GPS
   cfgGPS(GPS_TIMEOUT, CLK_SYNC_INT, GPS_Enable_Pin, TZ_OFFSET);
   getGPSFix(true);
@@ -175,6 +178,8 @@ void getBLECmd(char cmd) {
       //split into 2 packets since it's over 255 chars
       sprintf(buf, "\n\tPI_ON_TIMEOUT(s):%d\n\tPI_SAVE_TIMEOUT(s):%d\n\tMAX_BATT_VOLTAGE(V):%0.2f\n\tLOW_BATT_CUTOFF(V):%0.2f\n\tTZ_OFFSET(hr):%d\n",
       PI_ON_TIMEOUT/1000, PI_SAVE_TIMEOUT/1000, MAX_BATT_VOLTAGE, LOW_BATT_CUTOFF, TZ_OFFSET);
+      writeBLE(buf, false);
+      sprintf(buf, "\nDebug info: data_mtu=%d\n", data_mtu);
       writeBLE(buf);
       break;
     }
@@ -219,8 +224,9 @@ void showMenu(void) {
 }
 
 void getAdv(char* statbuf) {
+  int batt_int = (int)min(calcBattPerc(getBattV()),99);
   //new name MUST be the same length or the soft device will reject it and stop advertising
-  sprintf(statbuf, "PiCam%03d %02d %04d %02d/%02d %02d:%02d", ID, (int)min(calcBattPerc(getBattV()),99), img_count, month(), day(), hour(), minute());
+  sprintf(statbuf, "PiCam%03d %02d %04d %02d/%02d %02d:%02d", ID, batt_int, img_count, month(), day(), hour(), minute());
 }
 
 void getStatus(char* statbuf) {
@@ -425,7 +431,7 @@ void startPiPreview() {
       sprintf(buf, "img_blob:%06d:", f_len);
       writeBLE(buf, false, true);
 
-      const uint16_t packet_size = 32; //>=255 causes issues at packet boundaries
+      const uint16_t packet_size = data_mtu; //32  //>=255 causes issues at packet boundaries
       for (uint32_t buf_pos=0;buf_pos<=(f_len-1);buf_pos+=packet_size) {
         writeBLE(&img_buf[buf_pos], false, true, min(packet_size,(f_len-buf_pos)));
       } 

@@ -10,6 +10,7 @@ extern BLEUart bleuart; // uart over ble
 
 extern uint8_t mac[6];
 extern volatile bool connected;
+extern volatile uint16_t data_mtu;
 
 void setupAdv(void);
 void setupBluetooth(char*);
