@@ -123,8 +123,8 @@ void loop()
     startPi(false);
   }
 
-  if (ble_timer.check() || (old_count != img_count)) {
-    old_count = img_count;
+  if (ble_timer.check()) { // || (old_count != img_count)) {
+    //old_count = img_count;
     ble_timer.reset();
     getAdv(adv_buf);
     updateAdv(adv_buf);
@@ -259,6 +259,10 @@ void enterStandby() {
   nrf_gpio_cfg_default(PIN_WIRE_SCL);
   nrf_gpio_cfg_default(PIN_SERIAL1_RX);
   nrf_gpio_cfg_default(PIN_SERIAL1_TX);
+
+  ble_timer.reset();
+  getAdv(adv_buf);
+  updateAdv(adv_buf);
 }
 
 void exitStandby() {
